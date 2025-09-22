@@ -4,6 +4,7 @@ const roleTeacher = require("../middleware/role");
 const pollController = require("../controllers/pollController");
 const protect = require("../middleware/authMiddleware");
 
+router.route("/emtpy-ans").delete(pollController.emptyAnswers);
 router.route("/history").get(pollController.getPollHistory);
 router.route("/view-result/:id").get(pollController.getPollResults);
 router
@@ -13,7 +14,6 @@ router
 router.route("/create").post(protect, pollController.createPoll);
 router.route("/submit").post(protect, pollController.submitAnswer);
 router.route("/latest").get(protect, pollController.getLatestPoll);
-router.route("/emtpy-ans").delete(pollController.emptyAnswers);
 router
   .route("/:pollId/participants")
   .get(protect, roleTeacher, pollController.getParticipants);
