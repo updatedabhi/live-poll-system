@@ -12,7 +12,7 @@ app.use(cookieParser());
 
 app.use(
   cors({
-    origin: "https://cerulean-bublanina-12d295.netlify.app/",
+    origin: "https://cerulean-bublanina-12d295.netlify.app",
     credentials: true,
   })
 );
