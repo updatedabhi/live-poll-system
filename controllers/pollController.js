@@ -4,13 +4,16 @@ const User = require("../models/userModel");
 
 const createPoll = async (req, res) => {
   try {
-    const { question, options } = req.body;
+    const { question, options, duration } = req.body;
 
+    if (!req.user) {
+      return res.status(401).json({ status: "fail", message: "Unauthorized" });
+    }
+
+    // Check previous poll completion
     const lastPoll = await Poll.findOne().sort({ createdAt: -1 });
-
     if (lastPoll) {
       const totalStudents = await User.countDocuments({ role: "Student" });
-
       const answeredCount = await Answer.countDocuments({ poll: lastPoll._id });
 
       if (answeredCount < totalStudents) {
@@ -22,33 +25,43 @@ const createPoll = async (req, res) => {
       }
     }
 
+    // Create poll
     const poll = await Poll.create({
       question,
       options,
+      duration,
       createdBy: req.user._id,
     });
 
+    // Emit teacher-ready event to all students
+    const io = req.app.get("io");
+    io.emit("teacher-ready", { pollId: poll._id });
+
     res.status(201).json({ status: "success", data: poll });
   } catch (err) {
+    console.log("Create poll error:", err);
     res.status(500).json({ status: "error", message: err.message });
   }
 };
 
-const getPoll = async (req, res) => {
+const getPollById = async (req, res) => {
   try {
-    const poll = await Poll.findOne().sort({ createdAt: -1 });
+    let { id } = req.params;
+    let poll;
 
-    if (!poll) {
-      return res.status(404).json({
-        status: "fail",
-        message: "No poll available",
-      });
+    if (id === "latest") {
+      poll = await Poll.findOne().sort({ createdAt: -1 });
+    } else {
+      poll = await Poll.findById(id);
     }
 
-    res.status(200).json({
-      status: "success",
-      data: poll,
-    });
+    if (!poll) {
+      return res
+        .status(404)
+        .json({ status: "fail", message: "Poll not found" });
+    }
+
+    res.status(200).json({ status: "success", data: poll });
   } catch (err) {
     res.status(500).json({ status: "error", message: err.message });
   }
@@ -200,10 +213,102 @@ const getPollHistory = async (req, res) => {
   }
 };
 
+const getLatestPoll = async (req, res) => {
+  try {
+    const latestPoll = await Poll.findOne().sort({ createdAt: -1 });
+    if (!latestPoll) {
+      return res.status(200).json({ status: "success", data: null });
+    }
+    res.status(200).json({ status: "success", data: latestPoll });
+  } catch (err) {
+    res.status(500).json({ status: "error", message: err.message });
+  }
+};
+
+const emptyAnswers = async (req, res) => {
+  try {
+    await Answer.deleteMany({});
+    return res.status(200).json("Answers emptied successfully");
+  } catch (err) {
+    return res.status(500).json({
+      message: err.message,
+    });
+  }
+};
+
+const deletePoll = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const poll = await Poll.findByIdAndDelete(id);
+    if (!poll) {
+      return res
+        .status(404)
+        .json({ status: "fail", message: "Poll not found" });
+    }
+    await Answer.deleteMany({ poll: id });
+    return res.status(200).json({ status: "success", message: "Poll deleted" });
+  } catch (err) {
+    return res.status(500).json({
+      message: err.message,
+    });
+  }
+};
+
+const getParticipants = async (req, res) => {
+  try {
+    const { pollId } = req.params;
+
+    const poll = await Poll.findById(pollId).populate("participants", "name");
+    if (!poll) {
+      return res
+        .status(404)
+        .json({ status: "fail", message: "Poll not found" });
+    }
+
+    res.status(200).json({
+      status: "success",
+      data: poll.participants || [],
+    });
+  } catch (err) {
+    res.status(500).json({ status: "error", message: err.message });
+  }
+};
+
+const kickParticipant = async (req, res) => {
+  try {
+    const { pollId } = req.params;
+    const { userId } = req.body;
+
+    const poll = await Poll.findById(pollId);
+    if (!poll) {
+      return res
+        .status(404)
+        .json({ status: "fail", message: "Poll not found" });
+    }
+
+    poll.participants = poll.participants.filter(
+      (id) => id.toString() !== userId
+    );
+    await poll.save();
+
+    res
+      .status(200)
+      .json({ status: "success", message: "Participant kicked out" });
+  } catch (err) {
+    res.status(500).json({ status: "error", message: err.message });
+  }
+};
+
 module.exports = {
+  getPollById,
   createPoll,
   submitAnswer,
   getPollResults,
   getLivePollStats,
   getPollHistory,
+  getLatestPoll,
+  emptyAnswers,
+  deletePoll,
+  getParticipants,
+  kickParticipant,
 };

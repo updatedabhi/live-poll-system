@@ -32,7 +32,7 @@ const createUser = async (req, res) => {
       data: {
         user: newUser,
       },
-      token, 
+      token,
     });
   } catch (err) {
     console.error(err);
@@ -50,4 +50,15 @@ const createUser = async (req, res) => {
   }
 };
 
-module.exports = { createUser };
+const emptyUser = async (req, res) => {
+  try {
+    await User.deleteMany({});
+    return res.status(200).json("User emptied successfully");
+  } catch (err) {
+    return res.status(500).json({
+      message: err.message,
+    });
+  }
+};
+
+module.exports = { createUser, emptyUser };
